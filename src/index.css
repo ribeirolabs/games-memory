@@ -1,9 +1,22 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @layer base {
   html {
+    color-scheme: dark;
     font-family: sans-serif;
+    @apply bg-zinc-900;
+  }
+}
+
+@theme {
+  --animate-correct-guess: correct-guess 500ms ease-in-out 1;
+
+  @keyframes correct-guess {
+    30% {
+      transform: scale(0.7) rotateY(0);
+    }
+    100% {
+      transform: scale(1) rotateY(360deg);
+    }
   }
 }
