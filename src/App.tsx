@@ -32,7 +32,7 @@ export default function App() {
       <div className="grid w-fit grid-cols-4 gap-2">
         {context.cards.map((card) => {
           const isSelected = context.guess.map((s) => s.id).includes(card.id);
-          const isGuessed = context.opened[card.value];
+          const isGuessed = context.guessed[card.value];
           const isVisible = isSelected || isGuessed;
 
           return (
@@ -111,14 +111,14 @@ type Player = {
 
 type Points = Record<Player["id"], number>;
 
-type OpenedCards = Record<Card["id"], boolean>;
+type GuessedCards = Record<Card["id"], boolean>;
 
 type GameContext = {
   turn: number;
   players: Player[];
   points: Points;
   guess: Guess[];
-  opened: OpenedCards;
+  guessed: GuessedCards;
   cards: Card[];
   winners: Player[];
 };
@@ -147,8 +147,8 @@ const machine = setup({
               [player.id]: 1 + (context.points[player.id] ?? 0),
             },
             guess: [],
-            opened: {
-              ...context.opened,
+            guessed: {
+              ...context.guessed,
               [first.value]: true,
             },
           };
@@ -204,7 +204,7 @@ const machine = setup({
         points: {},
         guess: [],
         winners: [],
-        opened: {},
+        guessed: {},
         turn: getTurnFromWinner(context) ?? 0,
       };
     }),
@@ -218,7 +218,7 @@ const machine = setup({
     points: {},
     guess: [],
     winners: [],
-    opened: {},
+    guessed: {},
   },
   initial: "loop",
   on: {
@@ -312,7 +312,7 @@ function getWinners(context: Readonly<GameContext>): Player[] {
 }
 
 function isGameOver(context: Readonly<GameContext>): boolean {
-  return Object.keys(context.opened).length * 2 === context.cards.length;
+  return Object.keys(context.guessed).length * 2 === context.cards.length;
 }
 
 function getTurnFromWinner(context: Readonly<GameContext>): number | null {
