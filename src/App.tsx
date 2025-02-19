@@ -4,21 +4,6 @@ import { twMerge } from "tailwind-merge";
 import { setup, assign } from "xstate";
 import { id } from "./utils/id";
 
-const VALUES = "abcdef";
-const COLORS = ["red", "green", "blue", "orange", "purple", "black", "gray"];
-const CARDS = VALUES.split("").flatMap((value, i) => {
-  const cards = [];
-  for (let j = 0; j < 2; j++) {
-    cards.push({
-      id: id(),
-      value,
-      data: value,
-      color: COLORS[i],
-    });
-  }
-  return cards;
-});
-
 export default function App() {
   const [{ context }, send] = useMachine(machine);
 
@@ -128,28 +113,22 @@ type Points = Record<Player["id"], number>;
 
 type OpenedCards = Record<Card["id"], boolean>;
 
-const PLAYERS: Player[] = ["Igor", "Nay"].map((name) => ({
-  id: id(),
-  name,
-}));
+type GameContext = {
+  turn: number;
+  players: Player[];
+  points: Points;
+  guess: Guess[];
+  opened: OpenedCards;
+  cards: Card[];
+  winners: Player[];
+};
 
-type Event =
-  | { type: "GUESS"; guess: Guess }
-  | { type: "RESTART" }
-  | { type: "GAME_OVER" };
+type GameEvent = { type: "GUESS"; guess: Guess } | { type: "RESTART" };
 
 const machine = setup({
   types: {
-    context: {} as {
-      turn: number;
-      players: Player[];
-      points: Points;
-      guess: Guess[];
-      opened: OpenedCards;
-      cards: Card[];
-      winners: Player[];
-    },
-    events: {} as Event,
+    context: {} as GameContext,
+    events: {} as GameEvent,
   },
   actions: {
     update: assign(({ context }) => {
@@ -182,37 +161,32 @@ const machine = setup({
 
       return context;
     }),
-    guess: assign(({ context, event }) => {
-      if (!isEventType(event, "GUESS")) {
-        return context;
-      }
-
-      if (context.guess.length === 2) {
-        if (context.players.length === 1) {
-          return {
-            guess: [context.guess[1], event.guess],
-          };
-        } else {
-          return {
-            guess: [event.guess],
-          };
+    guess: assign({
+      guess: ({ context, event }) => {
+        if (!isEventType(event, "GUESS")) {
+          return context.guess;
         }
-      }
 
-      return {
-        guess: context.guess.concat(event.guess),
-      };
+        if (context.guess.length === 2) {
+          if (context.players.length === 1) {
+            return [context.guess[1], event.guess];
+          } else {
+            return [event.guess];
+          }
+        }
+
+        return context.guess.concat(event.guess);
+      },
     }),
-    cleanup: assign(({ context, self }) => {
+    cleanup: assign(({ context }) => {
       if (context.guess.length === 1) {
         return context;
       }
 
-      if (isGameOver(context.opened, CARDS.length)) {
-        self.send({ type: "GAME_OVER" });
-
+      if (isGameOver(context)) {
         return {
-          winners: getWinners(context.players, context.points),
+          winners: getWinners(context),
+          guess: [],
         };
       }
 
@@ -225,23 +199,22 @@ const machine = setup({
         return context;
       }
 
-      // TODO: start with the winner of the last round?
       return {
         cards: shuffle(context.cards),
         points: {},
         guess: [],
         winners: [],
         opened: {},
-        turn: 0,
+        turn: getTurnFromWinner(context) ?? 0,
       };
     }),
   },
 }).createMachine({
   id: "game-loop",
   context: {
-    cards: shuffle(CARDS),
+    cards: shuffle(getCards()),
     turn: 0,
-    players: PLAYERS,
+    players: getPlayers(),
     points: {},
     guess: [],
     winners: [],
@@ -257,7 +230,6 @@ const machine = setup({
       target: ".loop",
       actions: ["restart"],
     },
-    GAME_OVER: ".gameOver",
   },
   states: {
     loop: {},
@@ -279,28 +251,56 @@ const machine = setup({
         type: "cleanup",
       },
     },
-    gameOver: {},
   },
 });
+
+function getCards(): Card[] {
+  const VALUES = "abcdef";
+  const COLORS = ["red", "green", "blue", "orange", "purple", "black", "gray"];
+  return VALUES.split("").flatMap((value, i) => {
+    const cards = [];
+    for (let j = 0; j < 2; j++) {
+      cards.push({
+        id: id(),
+        value,
+        data: value,
+        color: COLORS[i],
+      });
+    }
+    return cards;
+  });
+}
+
+function getPlayers(): Player[] {
+  return ["Igor", "Nay", "Elis"].map((name) => ({
+    id: id(),
+    name,
+  }));
+}
 
 function nextTurn(currentTurn: number, playersCount: number): number {
   return (currentTurn + 1) % playersCount;
 }
 
-function isEventType<T extends Event["type"]>(
-  event: Event,
+function isEventType<T extends GameEvent["type"]>(
+  event: GameEvent,
   type: T,
-): event is Extract<Event, { type: T }> {
+): event is Extract<GameEvent, { type: T }> {
   return event.type === type;
 }
 
-function getWinners(players: Player[], points: Points): Player[] {
-  let winners = [players[0]];
-  let max = points[winners[0].id] ?? 0;
+function getWinners(context: Readonly<GameContext>): Player[] {
+  let winners = [context.players[context.turn]];
+  let max = context.points[winners[0].id] ?? 0;
 
-  for (let i = 1; i < players.length; i++) {
-    const player = players[i];
-    const playerPoints = points[player.id] ?? 0;
+  for (let i = 0; i < context.players.length; i++) {
+    if (i === context.turn) {
+      continue;
+    }
+
+    const player = context.players[i];
+    const playerPoints = context.points[player.id] ?? 0;
+
     if (playerPoints > max) {
       winners = [player];
     } else if (playerPoints === max) {
@@ -311,6 +311,20 @@ function getWinners(players: Player[], points: Points): Player[] {
   return winners;
 }
 
-function isGameOver(opened: OpenedCards, cardsCount: number): boolean {
-  return Object.keys(opened).length * 2 === cardsCount;
+function isGameOver(context: Readonly<GameContext>): boolean {
+  return Object.keys(context.opened).length * 2 === context.cards.length;
+}
+
+function getTurnFromWinner(context: Readonly<GameContext>): number | null {
+  const positionByPlayer = context.players.reduce(
+    (byPlayer, player, position) => {
+      return {
+        ...byPlayer,
+        [player.id]: position,
+      };
+    },
+    {} as Record<Player["id"], number>,
+  );
+
+  return positionByPlayer[context.winners[0]?.id] ?? null;
 }
