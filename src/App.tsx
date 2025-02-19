@@ -20,14 +20,14 @@ const CARDS = VALUES.split("").flatMap((value, i) => {
 });
 
 export default function App() {
-  const [state, send] = useMachine(machine);
+  const [{ context }, send] = useMachine(machine);
 
   return (
     <div className="space-y-2 p-4">
       <div className="flex gap-4">
-        {state.context.players.map((player, position) => {
-          const points = state.context.points[player.id] ?? 0;
-          const isTurn = state.context.turn === position;
+        {context.players.map((player, position) => {
+          const points = context.points[player.id] ?? 0;
+          const isTurn = context.turn === position;
 
           return (
             <div
@@ -45,13 +45,9 @@ export default function App() {
       </div>
 
       <div className="grid w-fit grid-cols-4 gap-2">
-        {state.context.cards.map((card) => {
-          const isSelected = state.context.guess
-            .map((s) => s.id)
-            .includes(card.id);
-
-          const isGuessed = state.context.opened[card.value];
-
+        {context.cards.map((card) => {
+          const isSelected = context.guess.map((s) => s.id).includes(card.id);
+          const isGuessed = context.opened[card.value];
           const isVisible = isSelected || isGuessed;
 
           return (
@@ -99,6 +95,14 @@ export default function App() {
       </div>
 
       <button onClick={() => send({ type: "RESTART" })}>Restart</button>
+
+      {context.winners.length > 0 ? (
+        <h1 className="text-5xl">
+          {context.winners.length > 1
+            ? "Tie"
+            : context.winners[0].name + " is the winner"}
+        </h1>
+      ) : null}
     </div>
   );
 }
@@ -129,7 +133,11 @@ const PLAYERS: Player[] = ["Igor", "Nay"].map((name) => ({
   name,
 }));
 
-type Event = { type: "GUESS"; guess: Guess } | { type: "RESTART" };
+type Event =
+  | { type: "GUESS"; guess: Guess }
+  | { type: "RESTART" }
+  | { type: "GAME_OVER" };
+
 const machine = setup({
   types: {
     context: {} as {
@@ -139,6 +147,7 @@ const machine = setup({
       guess: Guess[];
       opened: OpenedCards;
       cards: Card[];
+      winners: Player[];
     },
     events: {} as Event,
   },
@@ -194,15 +203,17 @@ const machine = setup({
         guess: context.guess.concat(event.guess),
       };
     }),
-    cleanup: assign(({ context }) => {
+    cleanup: assign(({ context, self }) => {
       if (context.guess.length === 1) {
         return context;
       }
 
       if (isGameOver(context.opened, CARDS.length)) {
-        const winners = getWinners(context.players, context.points);
-        console.log("GAME_OVER/winners", winners);
-        return context;
+        self.send({ type: "GAME_OVER" });
+
+        return {
+          winners: getWinners(context.players, context.points),
+        };
       }
 
       return {
@@ -214,11 +225,12 @@ const machine = setup({
         return context;
       }
 
-      // TODO: start with the winner
+      // TODO: start with the winner of the last round?
       return {
         cards: shuffle(context.cards),
         points: {},
         guess: [],
+        winners: [],
         opened: {},
         turn: 0,
       };
@@ -232,6 +244,7 @@ const machine = setup({
     players: PLAYERS,
     points: {},
     guess: [],
+    winners: [],
     opened: {},
   },
   initial: "loop",
@@ -244,6 +257,7 @@ const machine = setup({
       target: ".loop",
       actions: ["restart"],
     },
+    GAME_OVER: ".gameOver",
   },
   states: {
     loop: {},
@@ -265,6 +279,7 @@ const machine = setup({
         type: "cleanup",
       },
     },
+    gameOver: {},
   },
 });
 
