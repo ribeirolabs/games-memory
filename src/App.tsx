@@ -113,6 +113,15 @@ type Points = Record<Player["id"], number>;
 
 type GuessedCards = Record<Card["id"], boolean>;
 
+enum ScoreSystem {
+  Time,
+  Hits,
+}
+
+type GameConfig = {
+  scoreSystem: ScoreSystem;
+};
+
 type GameContext = {
   turn: number;
   players: Player[];
@@ -121,6 +130,7 @@ type GameContext = {
   guessed: GuessedCards;
   cards: Card[];
   winners: Player[];
+  config: GameConfig;
 };
 
 type GameEvent = { type: "GUESS"; guess: Guess } | { type: "RESTART" };
@@ -132,20 +142,12 @@ const machine = setup({
   },
   actions: {
     update: assign(({ context }) => {
-      const player = context.players[context.turn];
-      if (!player) {
-        throw new Error(`Invalid turn, could not find player ${context.turn}`);
-      }
-
       if (context.guess.length === 2) {
         const [first, second] = context.guess;
 
         if (first.value === second.value) {
           return {
-            points: {
-              ...context.points,
-              [player.id]: 1 + (context.points[player.id] ?? 0),
-            },
+            points: getTurnPoints(context),
             guess: [],
             guessed: {
               ...context.guessed,
@@ -219,6 +221,9 @@ const machine = setup({
     guess: [],
     winners: [],
     guessed: {},
+    config: {
+      scoreSystem: ScoreSystem.Hits,
+    },
   },
   initial: "loop",
   on: {
@@ -327,4 +332,21 @@ function getTurnFromWinner(context: Readonly<GameContext>): number | null {
   );
 
   return positionByPlayer[context.winners[0]?.id] ?? null;
+}
+
+function getTurnPlayer(context: Readonly<GameContext>): Player {
+  const player = context.players[context.turn];
+  if (!player) {
+    throw new Error(`Invalid turn, could not find player ${context.turn}`);
+  }
+  return player;
+}
+
+function getTurnPoints(context: Readonly<GameContext>): GameContext["points"] {
+  const player = getTurnPlayer(context);
+  const playerPoints = 1 + (context.points[player.id] ?? 0);
+  return {
+    ...context.points,
+    [player.id]: playerPoints,
+  };
 }
