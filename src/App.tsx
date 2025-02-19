@@ -169,12 +169,17 @@ const machine = setup({
           return context.guess;
         }
 
+        // The logic below allows for fast gameplay, allowing players to keep
+        // selecting cards regardless of the current selection
         if (context.guess.length === 2) {
-          if (context.players.length === 1) {
-            return [context.guess[1], event.guess];
-          } else {
-            return [event.guess];
-          }
+          return context.players.length === 1
+            ? // When it's single player we allow the player to keep selecting
+              // cards, even if there are two cards selected already, by discarding
+              // the first selection and using the last selection and the new one
+              [context.guess[1], event.guess]
+            : // When it's multi player we clear the guesses on the third click
+              // by only using the current selection
+              [event.guess];
         }
 
         return context.guess.concat(event.guess);
