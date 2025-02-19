@@ -6,6 +6,10 @@
     font-family: sans-serif;
     @apply bg-zinc-900;
   }
+
+  * {
+    @apply border-zinc-600;
+  }
 }
 
 @theme {
