@@ -50,7 +50,7 @@ export default function App() {
               }
               disabled={isVisible}
               style={{
-                borderColor: card.color,
+                borderColor: card.data,
               }}
             >
               <div
@@ -69,10 +69,10 @@ export default function App() {
                       : "[transform:rotateY(90deg)] opacity-5",
                 )}
                 style={{
-                  backgroundColor: card.color,
+                  backgroundColor: card.data,
                 }}
               >
-                {card.data}
+                {card.value}
               </div>
             </button>
           );
@@ -101,7 +101,6 @@ type Card = {
   id: string;
   value: string;
   data: any;
-  color?: string;
 };
 
 type Player = {
@@ -273,8 +272,7 @@ function getCards(): Card[] {
       cards.push({
         id: id(),
         value,
-        data: value,
-        color: COLORS[i],
+        data: COLORS[i],
       });
     }
     return cards;
