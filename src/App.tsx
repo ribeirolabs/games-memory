@@ -79,7 +79,16 @@ export default function App() {
         })}
       </div>
 
-      <button onClick={() => send({ type: "RESTART" })}>Restart</button>
+      <div className="flex gap-4">
+        <button onClick={() => send({ type: "RESTART" })}>Restart</button>
+        <button
+          onClick={() => send({ type: "REVEAL" })}
+          disabled={!context.actions.reveal}
+          className="disabled:opacity-40"
+        >
+          Reveal
+        </button>
+      </div>
 
       {context.winners.length > 0 ? (
         <h1 className="text-5xl">
@@ -130,9 +139,16 @@ type GameContext = {
   cards: Card[];
   winners: Player[];
   config: GameConfig;
+  actions: {
+    restart: boolean;
+    reveal: boolean;
+  };
 };
 
-type GameEvent = { type: "GUESS"; guess: Guess } | { type: "RESTART" };
+type GameEvent =
+  | { type: "GUESS"; guess: Guess }
+  | { type: "RESTART" }
+  | { type: "REVEAL" };
 
 const machine = setup({
   types: {
@@ -203,7 +219,31 @@ const machine = setup({
         winners: [],
         guessed: {},
         turn: getTurnFromWinner(context) ?? 0,
+        actions: {
+          restart: true,
+          reveal: true,
+        },
       };
+    }),
+    reveal: assign(({ context }) => {
+      return {
+        actions: {
+          ...context.actions,
+          reveal: false,
+        },
+        guessed: context.cards.reduce(
+          (guessed, card) => {
+            return {
+              ...guessed,
+              [card.value]: true,
+            };
+          },
+          {} as GameContext["guessed"],
+        ),
+      };
+    }),
+    unreveal: assign({
+      guessed: {},
     }),
   },
   guards: {
@@ -212,6 +252,9 @@ const machine = setup({
     },
     hasTotalGuesses({ context }, params: { total: number }) {
       return context.guess.length === params.total;
+    },
+    canReveal({ context }) {
+      return context.actions.reveal;
     },
   },
 }).createMachine({
@@ -224,6 +267,10 @@ const machine = setup({
     guess: [],
     winners: [],
     guessed: {},
+    actions: {
+      reveal: true,
+      restart: true,
+    },
     config: {
       scoreSystem: ScoreSystem.Hits,
     },
@@ -240,7 +287,14 @@ const machine = setup({
     },
   },
   states: {
-    loop: {},
+    loop: {
+      on: {
+        REVEAL: {
+          target: "reveal",
+          guard: "canReveal",
+        },
+      },
+    },
     updating: {
       after: {
         1000: [
@@ -261,6 +315,15 @@ const machine = setup({
     },
     wait: {
       always: "loop",
+    },
+    reveal: {
+      entry: "reveal",
+      after: {
+        3000: {
+          target: "loop",
+          actions: "unreveal",
+        },
+      },
     },
   },
 });
