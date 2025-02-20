@@ -184,21 +184,12 @@ const machine = setup({
         return context.guess.concat(event.guess);
       },
     }),
-    cleanup: assign(({ context }) => {
-      if (context.guess.length === 1) {
-        return context;
-      }
-
-      if (isGameOver(context)) {
-        return {
-          winners: getWinners(context),
-          guess: [],
-        };
-      }
-
-      return {
-        guess: [],
-      };
+    setWinners: assign({
+      winners: ({ context }) => getWinners(context),
+      guess: [],
+    }),
+    clearGuess: assign({
+      guess: [],
     }),
     restart: assign(({ event, context }) => {
       if (!isEventType(event, "RESTART")) {
@@ -214,6 +205,14 @@ const machine = setup({
         turn: getTurnFromWinner(context) ?? 0,
       };
     }),
+  },
+  guards: {
+    isGameOver({ context }) {
+      return isGameOver(context);
+    },
+    hasTotalGuesses({ context }, params: { total: number }) {
+      return context.guess.length === params.total;
+    },
   },
 }).createMachine({
   id: "game-loop",
@@ -244,21 +243,24 @@ const machine = setup({
     loop: {},
     updating: {
       after: {
-        1000: {
-          target: "wait",
-        },
+        1000: [
+          {
+            target: "wait",
+            guard: "isGameOver",
+            actions: ["setWinners"],
+          },
+          {
+            target: "wait",
+            guard: { type: "hasTotalGuesses", params: { total: 2 } },
+            actions: ["clearGuess"],
+          },
+          { target: "wait" },
+        ],
       },
-      entry: {
-        type: "update",
-      },
+      entry: "update",
     },
     wait: {
-      always: {
-        target: "loop",
-      },
-      entry: {
-        type: "cleanup",
-      },
+      always: "loop",
     },
   },
 });
